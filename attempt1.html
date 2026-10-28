@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRON HALLS — Stage 1</title>
+<style>
+  :root { color-scheme: dark; --amber:#e7bd72; --panel:#11110f; }
+  * { box-sizing:border-box }
+  html,body { margin:0; min-height:100%; background:#090a09; color:#eee8d8; font-family:Consolas,Monaco,monospace; }
+  body { display:grid; place-items:center; padding:18px; }
+  .shell { width:min(1100px,100%); }
+  header { display:flex; justify-content:space-between; align-items:end; gap:16px; padding:0 2px 12px; border-bottom:1px solid #494034; }
+  .eyebrow { color:var(--amber); font-size:11px; letter-spacing:.22em; }
+  h1 { font-size:clamp(20px,4vw,34px); margin:5px 0 0; letter-spacing:.08em; }
+  .status { font-size:11px; color:#9d9b8f; text-align:right; line-height:1.6; }
+  .screen { position:relative; margin-top:12px; background:#000; border:3px solid #39342b; box-shadow:0 0 0 1px #080807, 0 18px 60px #000b; overflow:hidden; }
+  canvas { display:block; width:100%; aspect-ratio:16/9; image-rendering:pixelated; cursor:crosshair; }
+  .overlay { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:#050605b8; text-align:center; }
+  .overlay.hidden { display:none; }
+  .card { width:min(460px,100%); padding:24px; border:1px solid #716044; background:#11110fee; box-shadow:0 8px 36px #000a; }
+  .card h2 { color:var(--amber); letter-spacing:.12em; margin:0 0 12px; font-size:clamp(20px,4vw,30px); }
+  .card p { color:#c5c0b2; font-size:13px; line-height:1.65; }
+  button { cursor:pointer; background:var(--amber); border:0; color:#17120a; font:700 13px Consolas,monospace; letter-spacing:.12em; padding:13px 20px; margin-top:8px; }
+  button:hover { background:#f7d99c; }
+  .hud { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 14px; background:linear-gradient(#29251d,#14130f); border:1px solid #514635; border-top:0; }
+  .hudgroup { display:flex; align-items:center; gap:9px; min-width:0; }
+  .label { color:#a9a08b; font-size:10px; letter-spacing:.1em; }
+  .value { color:#f1d69e; font-size:13px; font-weight:bold; }
+  .meter { width:80px; height:7px; background:#42382b; border:1px solid #716044; }
+  .meter span { display:block; height:100%; width:100%; background:#d0a65e; }
+  .below { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 2px 0; color:#969487; font-size:11px; line-height:1.6; }
+  kbd { display:inline-block; padding:2px 5px; color:#e8dfcb; background:#22211c; border:1px solid #514a3b; border-bottom-width:2px; border-radius:3px; font:inherit; }
+  @media(max-width:600px){ body{padding:8px} header{align-items:start}.status{max-width:125px}.hud{flex-wrap:wrap}.meter{width:52px}.below{font-size:10px} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div><div class="eyebrow">FIELD TEST 01 / RAYCASTING SYSTEM</div><h1>IRON HALLS</h1></div>
+    <div class="status">PROTOTYPE BUILD 0.1<br><span id="statusText">SYSTEM STANDBY</span></div>
+  </header>
+  <div class="screen">
+    <canvas id="game" width="400" height="225" aria-label="Retro first-person maze game"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <div class="eyebrow">MISSION SIMULATION / STAGE 1</div>
+        <h2 id="overlayTitle">ENTER THE HALLS</h2>
+        <p id="overlayText">Find your way through the stone corridors. This first build focuses on the raycasting engine, movement, collision, and atmosphere.</p>
+        <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Mouse</kbd> look around<br><kbd>Shift</kbd> sprint &nbsp; <kbd>Esc</kbd> release mouse</p>
+        <button id="startBtn">START WALKING</button>
+      </div>
+    </div>
+  </div>
+  <div class="hud">
+    <div class="hudgroup"><span class="label">POSITION</span><span class="value" id="position">04 : 04</span></div>
+    <div class="hudgroup"><span class="label">PACE</span><span class="value" id="pace">STANDING</span></div>
+    <div class="hudgroup"><span class="label">STAMINA</span><div class="meter"><span id="staminaBar"></span></div></div>
+    <div class="hudgroup"><span class="label">SECTOR</span><span class="value">THE OLD KEEP</span></div>
+  </div>
+  <div class="below"><span><kbd>WASD</kbd> MOVE &nbsp; <kbd>SHIFT</kbd> SPRINT &nbsp; <kbd>MOUSE</kbd> TURN</span><span>STAGE 1: EXPLORE THE MAZE · SOUND ENABLES ON START</span></div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  ctx.imageSmoothingEnabled = false;
+  const W = canvas.width, H = canvas.height;
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayText = document.getElementById('overlayText');
+  const statusText = document.getElementById('statusText');
+  const positionText = document.getElementById('position');
+  const paceText = document.getElementById('pace');
+  const staminaBar = document.getElementById('staminaBar');
+
+  // # = wall, . = walkable floor. The map is intentionally handcrafted.
+  const map = [
+    '####################',
+    '#......#...........#',
+    '#......#..####.....#',
+    '#......#..#..#.....#',
+    '#..........#..#....#',
+    '#..####....#..#....#',
+    '#..#.......#..####.#',
+    '#..#..##..........##',
+    '#.....##..###......#',
+    '###........#.......#',
+    '#..........#..###..#',
+    '#..####........#...#',
+    '#.....#........#...#',
+    '#.....#..####......#',
+    '#...........#......#',
+    '####################'
+  ];
+  const MAP_H = map.length, MAP_W = map[0].length;
+  const player = { x:2.5, y:2.5, angle:0.15, radius:0.19 };
+  const keys = Object.create(null);
+  let running = false, locked = false, lastTime = 0, stamina = 100;
+  let audioCtx = null, lastStep = 0;
+  const FOV = Math.PI / 3;
+  const depthBuffer = new Float32Array(W);
+
+  function wallAt(x,y) {
+    const mx = Math.floor(x), my = Math.floor(y);
+    return my < 0 || my >= MAP_H || mx < 0 || mx >= MAP_W || map[my][mx] === '#';
+  }
+  function canOccupy(x,y) {
+    const r = player.radius;
+    return !wallAt(x-r,y-r) && !wallAt(x+r,y-r) && !wallAt(x-r,y+r) && !wallAt(x+r,y+r);
+  }
+  function move(dx,dy) {
+    if (canOccupy(player.x + dx, player.y)) player.x += dx;
+    if (canOccupy(player.x, player.y + dy)) player.y += dy;
+  }
+  function castRay(angle) {
+    const rayX = Math.cos(angle), rayY = Math.sin(angle);
+    let mapX = Math.floor(player.x), mapY = Math.floor(player.y);
+    const deltaX = Math.abs(1 / (rayX || 1e-9));
+    const deltaY = Math.abs(1 / (rayY || 1e-9));
+    const stepX = rayX < 0 ? -1 : 1, stepY = rayY < 0 ? -1 : 1;
+    let sideX = rayX < 0 ? (player.x-mapX)*deltaX : (mapX+1-player.x)*deltaX;
+    let sideY = rayY < 0 ? (player.y-mapY)*deltaY : (mapY+1-player.y)*deltaY;
+    let side = 0, steps = 0;
+    while (steps++ < 80) {
+      if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
+      else { sideY += deltaY; mapY += stepY; side = 1; }
+      if (mapY < 0 || mapY >= MAP_H || mapX < 0 || mapX >= MAP_W || map[mapY][mapX] === '#') break;
+    }
+    let dist = side === 0 ? sideX-deltaX : sideY-deltaY;
+    dist = Math.max(0.001, dist);
+    let wallU = side === 0 ? player.y + dist*rayY : player.x + dist*rayX;
+    wallU -= Math.floor(wallU);
+    if ((side === 0 && rayX > 0) || (side === 1 && rayY < 0)) wallU = 1-wallU;
+    return { dist, side, wallU };
+  }
+  function drawWallTexture(x, top, height, wallU, side, dist) {
+    const stripe = Math.floor(wallU * 8);
+    const mortar = Math.floor((wallU * 8) % 1 * height * 0.42);
+    let brightness = Math.max(0.2, 1 - dist / 10);
+    if (side === 1) brightness *= 0.72;
+    const variation = (stripe % 2 ? 0.90 : 1.0) * (mortar < 2 ? 0.68 : 1.0);
+    const r = Math.floor(118 * brightness * variation);
+    const g = Math.floor(91 * brightness * variation);
+    const b = Math.floor(65 * brightness * variation);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, top, 1, height);
+    // Subtle block seams make the walls read like old stone.
+    if (mortar < 2 || (Math.floor(wallU*8) % 2 === 0 && height > 42 && ((x + Math.floor(top)) % 31 === 0))) {
+      ctx.fillStyle = `rgba(15,12,9,${0.22 * brightness})`;
+      ctx.fillRect(x, top + mortar, 1, Math.max(1, height*0.012));
+    }
+  }
+  function render() {
+    // Ceiling and floor gradients, drawn in bands for a deliberately low-res look.
+    const sky = ctx.createLinearGradient(0,0,0,H/2);
+    sky.addColorStop(0,'#171b1b'); sky.addColorStop(1,'#5a5144');
+    ctx.fillStyle = sky; ctx.fillRect(0,0,W,H/2);
+    const floor = ctx.createLinearGradient(0,H/2,0,H);
+    floor.addColorStop(0,'#403a30'); floor.addColorStop(1,'#11110f');
+    ctx.fillStyle = floor; ctx.fillRect(0,H/2,W,H/2);
+    // Horizon line.
+    ctx.fillStyle = '#6a5b45'; ctx.fillRect(0,H/2-1,W,2);
+    for (let x=0; x<W; x++) {
+      const cameraX = 2*x/W - 1;
+      const rayAngle = player.angle + Math.atan(cameraX * Math.tan(FOV/2));
+      const hit = castRay(rayAngle);
+      const corrected = hit.dist * Math.cos(rayAngle-player.angle);
+      depthBuffer[x] = corrected;
+      const wallH = Math.min(H*2, H / corrected * 0.82);
+      const top = Math.floor((H-wallH)/2);
+      drawWallTexture(x,top,Math.ceil(wallH),hit.wallU,hit.side,corrected);
+    }
+    // Minimal weapon silhouette placeholder: gives the camera a classic FPS anchor.
+    ctx.fillStyle = '#151411';
+    ctx.beginPath(); ctx.moveTo(W*0.39,H); ctx.lineTo(W*0.43,H*0.82); ctx.lineTo(W*0.47,H*0.77); ctx.lineTo(W*0.53,H*0.77); ctx.lineTo(W*0.57,H*0.82); ctx.lineTo(W*0.61,H); ctx.fill();
+    ctx.fillStyle = '#5a5548'; ctx.fillRect(W*0.475,H*0.78,W*0.05,H*0.17);
+    ctx.fillStyle = '#292821'; ctx.fillRect(W*0.488,H*0.72,W*0.024,H*0.09);
+    ctx.fillStyle = '#82775f'; ctx.fillRect(W*0.493,H*0.73,W*0.014,H*0.04);
+    // Center reticle.
+    ctx.fillStyle = '#e8d8b5'; ctx.globalAlpha = 0.75;
+    ctx.fillRect(W/2-3,H/2,2,1); ctx.fillRect(W/2+2,H/2,2,1);
+    ctx.fillRect(W/2,H/2-3,1,2); ctx.fillRect(W/2,H/2+2,1,2); ctx.globalAlpha = 1;
+    // Light vignette.
+    const vignette = ctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.72);
+    vignette.addColorStop(0,'rgba(0,0,0,0)'); vignette.addColorStop(1,'rgba(0,0,0,0.42)');
+    ctx.fillStyle = vignette; ctx.fillRect(0,0,W,H);
+  }
+  function initAudio() {
+    if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) audioCtx = new AudioContext();
+  }
+  function footstep() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'triangle'; osc.frequency.setValueAtTime(95 + Math.random()*28, now);
+    osc.frequency.exponentialRampToValueAtTime(48, now + 0.075);
+    gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.055, now + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.1);
+  }
+  function updateHud(moving,sprinting) {
+    positionText.textContent = `${String(Math.floor(player.x)).padStart(2,'0')} : ${String(Math.floor(player.y)).padStart(2,'0')}`;
+    paceText.textContent = moving ? (sprinting ? 'SPRINTING' : 'WALKING') : 'STANDING';
+    staminaBar.style.width = `${stamina}%`;
+    staminaBar.style.background = stamina < 25 ? '#b34e3e' : '#d0a65e';
+  }
+  function loop(time) {
+    const dt = Math.min(0.04, (time-lastTime)/1000 || 0); lastTime = time;
+    let moving = false, sprinting = !!keys.Shift && stamina > 1;
+    if (running) {
+      let forward = (keys.KeyW || keys.ArrowUp ? 1:0) - (keys.KeyS || keys.ArrowDown ? 1:0);
+      let strafe = (keys.KeyD ? 1:0) - (keys.KeyA ? 1:0);
+      const length = Math.hypot(forward,strafe) || 1;
+      forward /= length; strafe /= length;
+      moving = !!(forward || strafe);
+      const speed = sprinting ? 3.15 : 2.05;
+      if (moving) {
+        const dx = (Math.cos(player.angle)*forward + Math.cos(player.angle+Math.PI/2)*strafe) * speed * dt;
+        const dy = (Math.sin(player.angle)*forward + Math.sin(player.angle+Math.PI/2)*strafe) * speed * dt;
+        move(dx,dy);
+        if (sprinting) stamina = Math.max(0,stamina-24*dt); else stamina = Math.min(100,stamina+13*dt);
+        const interval = sprinting ? 0.27 : 0.42;
+        if (time-lastStep > interval*1000) { footstep(); lastStep=time; }
+      } else stamina = Math.min(100,stamina+17*dt);
+    }
+    render(); updateHud(moving,sprinting);
+    requestAnimationFrame(loop);
+  }
+  function begin() {
+    initAudio(); running = true; overlay.classList.add('hidden'); statusText.textContent = 'ACTIVE / EXPLORATION';
+    canvas.requestPointerLock?.();
+  }
+  startBtn.addEventListener('click', begin);
+  document.addEventListener('pointerlockchange', () => {
+    locked = document.pointerLockElement === canvas;
+    if (running && !locked) {
+      overlayTitle.textContent = 'PAUSED';
+      overlayText.textContent = 'Mouse control is released. Resume when you are ready to return to the halls.';
+      startBtn.textContent = 'RESUME'; overlay.classList.remove('hidden'); statusText.textContent = 'PAUSED';
+    }
+  });
+  document.addEventListener('mousemove', e => {
+    if (locked && running) player.angle += e.movementX * 0.0025;
+  });
+  document.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+    if (e.code === 'ArrowLeft' && !locked) player.angle -= 0.06;
+    if (e.code === 'ArrowRight' && !locked) player.angle += 0.06;
+  });
+  document.addEventListener('keyup', e => { keys[e.code] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k]=false; });
+  canvas.addEventListener('click', () => { if (running && !locked) canvas.requestPointerLock?.(); });
+  render(); updateHud(false,false); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

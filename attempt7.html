@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRON HALLS — Stage 7 Ammo Fix</title>
+<style>
+  :root { color-scheme: dark; --amber:#e7bd72; --panel:#11110f; }
+  * { box-sizing:border-box }
+  html,body { margin:0; min-height:100%; background:#090a09; color:#eee8d8; font-family:Consolas,Monaco,monospace; }
+  body { display:grid; place-items:center; padding:18px; }
+  .shell { width:min(1100px,100%); }
+  header { display:flex; justify-content:space-between; align-items:end; gap:16px; padding:0 2px 12px; border-bottom:1px solid #494034; }
+  .eyebrow { color:var(--amber); font-size:11px; letter-spacing:.22em; }
+  h1 { font-size:clamp(20px,4vw,34px); margin:5px 0 0; letter-spacing:.08em; }
+  .status { font-size:11px; color:#9d9b8f; text-align:right; line-height:1.6; }
+  .screen { position:relative; margin-top:12px; background:#000; border:3px solid #39342b; box-shadow:0 0 0 1px #080807, 0 18px 60px #000b; overflow:hidden; }
+  canvas { display:block; width:100%; aspect-ratio:16/9; image-rendering:pixelated; cursor:crosshair; }
+  .overlay { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:#050605b8; text-align:center; }
+  .overlay.hidden { display:none; }
+  .card { width:min(460px,100%); padding:24px; border:1px solid #716044; background:#11110fee; box-shadow:0 8px 36px #000a; }
+  .card h2 { color:var(--amber); letter-spacing:.12em; margin:0 0 12px; font-size:clamp(20px,4vw,30px); }
+  .card p { color:#c5c0b2; font-size:13px; line-height:1.65; }
+  button { cursor:pointer; background:var(--amber); border:0; color:#17120a; font:700 13px Consolas,monospace; letter-spacing:.12em; padding:13px 20px; margin-top:8px; }
+  button:hover { background:#f7d99c; }
+  .hud { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 14px; background:linear-gradient(#29251d,#14130f); border:1px solid #514635; border-top:0; }
+  .hudgroup { display:flex; align-items:center; gap:9px; min-width:0; }
+  .label { color:#a9a08b; font-size:10px; letter-spacing:.1em; }
+  .value { color:#f1d69e; font-size:13px; font-weight:bold; }
+  .meter { width:80px; height:7px; background:#42382b; border:1px solid #716044; }
+  .meter span { display:block; height:100%; width:100%; background:#d0a65e; }
+  .actionbar { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 2px 0; }
+  .actionhint { color:#9d927a; font-size:10px; letter-spacing:.14em; }
+  .actionbuttons { display:flex; gap:8px; flex-wrap:wrap; }
+  .actionbuttons button { margin:0; padding:8px 12px; font-size:10px; }
+  button.secondary { color:#e8dfcb; background:#29251d; border:1px solid #716044; }
+  button.secondary:hover { background:#393126; }
+  .below { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 2px 0; color:#969487; font-size:11px; line-height:1.6; }
+  kbd { display:inline-block; padding:2px 5px; color:#e8dfcb; background:#22211c; border:1px solid #514a3b; border-bottom-width:2px; border-radius:3px; font:inherit; }
+  @media(max-width:600px){ body{padding:8px} header{align-items:start}.status{max-width:125px}.hud{flex-wrap:wrap}.meter{width:52px}.below{font-size:10px}.actionbar{align-items:flex-start;flex-direction:column}.actionbuttons{width:100%}.actionbuttons button{flex:1} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div><div class="eyebrow">FIELD TEST 07 / MISSION FLOW & HUD</div><h1>IRON HALLS</h1></div>
+    <div class="status">PROTOTYPE BUILD 0.7A / AMMO FIX<br><span id="statusText">SYSTEM STANDBY</span></div>
+  </header>
+  <div class="screen">
+    <canvas id="game" width="400" height="225" aria-label="Retro first-person maze game"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <div class="eyebrow">MISSION BRIEFING / STAGE 7</div>
+        <h2 id="overlayTitle">ENTER THE HALLS</h2>
+        <p id="overlayText">MISSION: Find the brass key, eliminate all guards, collect supplies when needed, then reach the exit. Press P to pause. Press M for the tactical map.</p>
+        <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Mouse</kbd> look around<br><kbd>Shift</kbd> sprint &nbsp; <kbd>Click</kbd> fire &nbsp; <kbd>R</kbd> reload<br><kbd>M</kbd> tactical map &nbsp; <kbd>V</kbd> toggle audio &nbsp; <kbd>Esc</kbd> release mouse</p>
+        <button id="startBtn">START MISSION</button>
+      </div>
+    </div>
+  </div>
+  <div class="hud">
+    <div class="hudgroup"><span class="label">POSITION</span><span class="value" id="position">04 : 04</span></div>
+    <div class="hudgroup"><span class="label">PACE</span><span class="value" id="pace">STANDING</span></div>
+    <div class="hudgroup"><span class="label">STAMINA</span><div class="meter"><span id="staminaBar"></span></div></div>
+    <div class="hudgroup"><span class="label">HEALTH</span><span class="value" id="healthText">100%</span></div>
+    <div class="hudgroup"><span class="label">HOSTILES</span><span class="value" id="enemyText">04</span></div>
+    <div class="hudgroup"><span class="label">OBJECTIVE</span><span class="value" id="objectiveText">FIND KEY</span></div>
+    <div class="hudgroup"><span class="label">MAP</span><span class="value" id="mapText">OFF</span></div>
+    <div class="hudgroup"><span class="label">AUDIO</span><span class="value" id="audioText">ON</span></div>
+    <div class="hudgroup"><span class="label">AMMO (MAG / RES)</span><span class="value" id="ammoText">12 / 48</span></div>
+    <div class="hudgroup"><span class="label">SECTOR</span><span class="value">THE OLD KEEP</span></div>
+  </div>
+  <div class="actionbar">
+    <span class="actionhint">MISSION CONTROLS</span>
+    <div class="actionbuttons">
+      <button id="pauseBtn" type="button">PAUSE <kbd>P</kbd></button>
+      <button id="restartBtn" type="button" class="secondary">RESTART MISSION</button>
+    </div>
+  </div>
+  <div class="below"><span><kbd>WASD</kbd> MOVE &nbsp; <kbd>SHIFT</kbd> SPRINT &nbsp; <kbd>MOUSE</kbd> TURN</span><span>STAGE 7: MISSION FLOW · PAUSE / RESUME · RESTART</span></div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  ctx.imageSmoothingEnabled = false;
+  const W = canvas.width, H = canvas.height;
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayText = document.getElementById('overlayText');
+  const statusText = document.getElementById('statusText');
+  const positionText = document.getElementById('position');
+  const paceText = document.getElementById('pace');
+  const staminaBar = document.getElementById('staminaBar');
+  const ammoText = document.getElementById('ammoText');
+  const healthText = document.getElementById('healthText');
+  const enemyText = document.getElementById('enemyText');
+  const objectiveText = document.getElementById('objectiveText');
+  const mapText = document.getElementById('mapText');
+  const audioText = document.getElementById('audioText');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const restartBtn = document.getElementById('restartBtn');
+
+  // # = wall, . = walkable floor. The map is intentionally handcrafted.
+  const map = [
+    '####################',
+    '#......#...........#',
+    '#......#..####.....#',
+    '#......#..#..#.....#',
+    '#..........#..#....#',
+    '#..####....#..#....#',
+    '#..#.......#..####.#',
+    '#..#..##..........##',
+    '#.....##..###......#',
+    '###........#.......#',
+    '#..........#..###..#',
+    '#..####........#...#',
+    '#.....#........#...#',
+    '#.....#..####......#',
+    '#...........#......#',
+    '####################'
+  ];
+  const MAP_H = map.length, MAP_W = map[0].length;
+  const player = { x:2.5, y:2.5, angle:0.15, radius:0.19 };
+  // Enemies are simple billboard sprites positioned in the same 2D map.
+  const enemies = [
+    { x:4.8, y:1.55, hp:3, maxHp:3, alert:false, attackAt:0, hitFlash:0, alive:true },
+    { x:9.4, y:4.55, hp:3, maxHp:3, alert:false, attackAt:0, hitFlash:0, alive:true },
+    { x:15.6, y:2.5, hp:3, maxHp:3, alert:false, attackAt:0, hitFlash:0, alive:true },
+    { x:16.3, y:12.5, hp:3, maxHp:3, alert:false, attackAt:0, hitFlash:0, alive:true }
+  ];
+  let playerHealth = 100, damageFlash = 0, gameOver = false;
+  let ambientGain = null, ambientStarted = false, audioMuted = false;
+  let lastEnemyAttack = 0;
+  let hasKey = false, missionWon = false;
+  const pickups = [
+    {x:7.5,y:2.5,type:'health',amount:30,active:true},
+    {x:12.5,y:6.5,type:'ammo',amount:18,active:true},
+    {x:3.5,y:10.5,type:'ammo',amount:12,active:true},
+    {x:10.5,y:11.5,type:'health',amount:25,active:true},
+    {x:14.5,y:13.5,type:'key',amount:1,active:true}
+  ];
+  const exitDoor = {x:17.5,y:14.5};
+  const keys = Object.create(null);
+  let running = false, locked = false, lastTime = 0, stamina = 100, mapVisible = false;
+  let audioCtx = null, lastStep = 0;
+  let ammo = 12, reserveAmmo = 48, recoil = 0, muzzleFlash = 0, impactFlash = 0;
+  let lastShot = -Infinity, reloading = false, reloadUntil = 0;
+  const FOV = Math.PI / 3;
+  const depthBuffer = new Float32Array(W);
+
+  function wallAt(x,y) {
+    const mx = Math.floor(x), my = Math.floor(y);
+    return my < 0 || my >= MAP_H || mx < 0 || mx >= MAP_W || map[my][mx] === '#';
+  }
+  function canOccupy(x,y) {
+    const r = player.radius;
+    return !wallAt(x-r,y-r) && !wallAt(x+r,y-r) && !wallAt(x-r,y+r) && !wallAt(x+r,y+r);
+  }
+  function move(dx,dy) {
+    if (canOccupy(player.x + dx, player.y)) player.x += dx;
+    if (canOccupy(player.x, player.y + dy)) player.y += dy;
+  }
+  function castRay(angle) {
+    const rayX = Math.cos(angle), rayY = Math.sin(angle);
+    let mapX = Math.floor(player.x), mapY = Math.floor(player.y);
+    const deltaX = Math.abs(1 / (rayX || 1e-9));
+    const deltaY = Math.abs(1 / (rayY || 1e-9));
+    const stepX = rayX < 0 ? -1 : 1, stepY = rayY < 0 ? -1 : 1;
+    let sideX = rayX < 0 ? (player.x-mapX)*deltaX : (mapX+1-player.x)*deltaX;
+    let sideY = rayY < 0 ? (player.y-mapY)*deltaY : (mapY+1-player.y)*deltaY;
+    let side = 0, steps = 0;
+    while (steps++ < 80) {
+      if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
+      else { sideY += deltaY; mapY += stepY; side = 1; }
+      if (mapY < 0 || mapY >= MAP_H || mapX < 0 || mapX >= MAP_W || map[mapY][mapX] === '#') break;
+    }
+    let dist = side === 0 ? sideX-deltaX : sideY-deltaY;
+    dist = Math.max(0.001, dist);
+    let wallU = side === 0 ? player.y + dist*rayY : player.x + dist*rayX;
+    wallU -= Math.floor(wallU);
+    if ((side === 0 && rayX > 0) || (side === 1 && rayY < 0)) wallU = 1-wallU;
+    return { dist, side, wallU };
+  }
+  function drawWallTexture(x, top, height, wallU, side, dist) {
+    const stripe = Math.floor(wallU * 8);
+    const mortar = Math.floor((wallU * 8) % 1 * height * 0.42);
+    let brightness = Math.max(0.2, 1 - dist / 10);
+    if (side === 1) brightness *= 0.72;
+    const variation = (stripe % 2 ? 0.90 : 1.0) * (mortar < 2 ? 0.68 : 1.0);
+    const r = Math.floor(118 * brightness * variation);
+    const g = Math.floor(91 * brightness * variation);
+    const b = Math.floor(65 * brightness * variation);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, top, 1, height);
+    // Subtle block seams make the walls read like old stone.
+    if (mortar < 2 || (Math.floor(wallU*8) % 2 === 0 && height > 42 && ((x + Math.floor(top)) % 31 === 0))) {
+      ctx.fillStyle = `rgba(15,12,9,${0.22 * brightness})`;
+      ctx.fillRect(x, top + mortar, 1, Math.max(1, height*0.012));
+    }
+  }
+  function render() {
+    const time = performance.now(); // Shared animation clock for sprite poses.
+
+    // Ceiling and floor gradients, drawn in bands for a deliberately low-res look.
+    const sky = ctx.createLinearGradient(0,0,0,H/2);
+    sky.addColorStop(0,'#171b1b'); sky.addColorStop(1,'#5a5144');
+    ctx.fillStyle = sky; ctx.fillRect(0,0,W,H/2);
+    const floor = ctx.createLinearGradient(0,H/2,0,H);
+    floor.addColorStop(0,'#403a30'); floor.addColorStop(1,'#11110f');
+    ctx.fillStyle = floor; ctx.fillRect(0,H/2,W,H/2);
+    // Horizon line.
+    ctx.fillStyle = '#6a5b45'; ctx.fillRect(0,H/2-1,W,2);
+    for (let x=0; x<W; x++) {
+      const cameraX = 2*x/W - 1;
+      const rayAngle = player.angle + Math.atan(cameraX * Math.tan(FOV/2));
+      const hit = castRay(rayAngle);
+      const corrected = hit.dist * Math.cos(rayAngle-player.angle);
+      depthBuffer[x] = corrected;
+      const wallH = Math.min(H*2, H / corrected * 0.82);
+      const top = Math.floor((H-wallH)/2);
+      drawWallTexture(x,top,Math.ceil(wallH),hit.wallU,hit.side,corrected);
+    }
+    // Draw mission pickups and exit as depth-tested billboard icons.
+    const items = pickups.filter(p=>p.active).map(p=>{
+      let dx=p.x-player.x, dy=p.y-player.y;
+      let diff=Math.atan2(dy,dx)-player.angle;
+      while(diff>Math.PI) diff-=Math.PI*2;
+      while(diff<-Math.PI) diff+=Math.PI*2;
+      return {p,diff,dist:Math.hypot(dx,dy),sx:W/2+Math.tan(diff)/Math.tan(FOV/2)*W/2};
+    }).filter(o=>Math.abs(o.diff)<FOV*0.72 && o.dist>0.2).sort((a,b)=>b.dist-a.dist);
+    for (const o of items) {
+      const {p,dist,sx}=o;
+      const col=Math.max(0,Math.min(W-1,Math.round(sx)));
+      if (depthBuffer[col] < dist-0.12) continue;
+      const size=Math.max(3,Math.min(32,H/dist*0.16));
+      const y=H/2+H/dist*0.16;
+      ctx.save(); ctx.translate(sx,y);
+      if(p.type==='key'){
+        ctx.fillStyle='#e4bd58'; ctx.fillRect(-size*.13,-size*.48,size*.26,size*.8);
+        ctx.fillRect(-size*.42,-size*.38,size*.3,size*.16);
+        ctx.fillRect(-size*.42,-size*.05,size*.3,size*.16);
+        ctx.beginPath();ctx.arc(0,-size*.52,size*.24,0,Math.PI*2);ctx.fillStyle='#e4bd58';ctx.fill();
+        ctx.fillStyle='#30251a';ctx.beginPath();ctx.arc(0,-size*.52,size*.11,0,Math.PI*2);ctx.fill();
+      } else if(p.type==='health'){
+        ctx.fillStyle='#d8c7a0';ctx.fillRect(-size*.45,-size*.45,size*.9,size*.9);
+        ctx.fillStyle='#a5362b';ctx.fillRect(-size*.12,-size*.32,size*.24,size*.64);ctx.fillRect(-size*.32,-size*.12,size*.64,size*.24);
+      } else {
+        ctx.fillStyle='#8c9a72';ctx.fillRect(-size*.42,-size*.32,size*.84,size*.64);
+        ctx.fillStyle='#ded1a9';ctx.fillRect(-size*.25,-size*.18,size*.14,size*.36);ctx.fillRect(size*.08,-size*.18,size*.14,size*.36);
+      }
+      ctx.restore();
+    }
+    // Exit door is always visible as a simple green marker when in view.
+    {
+      let dx=exitDoor.x-player.x,dy=exitDoor.y-player.y;
+      let diff=Math.atan2(dy,dx)-player.angle;
+      while(diff>Math.PI)diff-=Math.PI*2;while(diff<-Math.PI)diff+=Math.PI*2;
+      const dist=Math.hypot(dx,dy),sx=W/2+Math.tan(diff)/Math.tan(FOV/2)*W/2;
+      if(Math.abs(diff)<FOV*.72&&dist>.2){
+        const col=Math.max(0,Math.min(W-1,Math.round(sx)));
+        if(depthBuffer[col]>=dist-.15){
+          const h=Math.min(H,H/dist*.5),w=h*.42,top=H/2-h*.48;
+          ctx.fillStyle=hasKey?'#64885a':'#76603e';
+          ctx.fillRect(sx-w/2,top,w,h);
+          ctx.strokeStyle=hasKey?'#a9d58a':'#c4a66c';ctx.lineWidth=Math.max(1,w*.05);
+          ctx.strokeRect(sx-w/2,top,w,h);
+          ctx.fillStyle='#d8bd79';ctx.fillRect(sx+w*.22,top+h*.52,Math.max(1,w*.06),Math.max(1,w*.06));
+        }
+      }
+    }
+
+    // Draw enemies as low-resolution billboard sprites, depth-tested against walls.
+    const visibleEnemies = enemies.filter(e => e.alive).map(e => {
+      let rel = e.x - player.x, relY = e.y - player.y;
+      let angle = Math.atan2(relY, rel);
+      while (angle - player.angle > Math.PI) angle -= Math.PI*2;
+      while (angle - player.angle < -Math.PI) angle += Math.PI*2;
+      const diff = angle - player.angle;
+      const dist = Math.hypot(rel, relY);
+      const screenX = W/2 + Math.tan(diff) / Math.tan(FOV/2) * W/2;
+      return { e, diff, dist, screenX };
+    }).filter(o => Math.abs(o.diff) < FOV*0.72 && o.dist > 0.18)
+      .sort((a,b) => b.dist-a.dist);
+    for (const o of visibleEnemies) {
+      const {e, dist, screenX} = o;
+      const spriteH = Math.min(H*1.2, H / dist * 0.52);
+      const spriteW = spriteH * 0.48;
+      const left = Math.round(screenX - spriteW/2), top = Math.round(H/2 - spriteH*0.48);
+      const centerColumn = Math.max(0, Math.min(W-1, Math.round(screenX)));
+      if (centerColumn >= 0 && centerColumn < W && depthBuffer[centerColumn] < dist - 0.12) continue;
+      if (left > W || left + spriteW < 0) continue;
+      const px = Math.max(1, Math.floor(spriteW/9));
+      const py = Math.max(1, Math.floor(spriteH/12));
+      const block = (x,y,w,h,color) => { ctx.fillStyle=color; ctx.fillRect(Math.round(left+x*spriteW), Math.round(top+y*spriteH), Math.max(1,Math.round(w*spriteW)), Math.max(1,Math.round(h*spriteH))); };
+      const dim = Math.max(0.42, 1-dist/10);
+      const phase = time * (e.alert ? 0.012 : 0.006) + e.x * 2.1;
+      const moving = e.alert && dist > 2.25;
+      const stride = moving ? Math.sin(phase) * 0.055 : 0;
+      const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 : 0;
+      const firing = e.alert && dist <= 4.0 && Math.sin(time*0.004+e.y)>0.65;
+      const uniform = e.hitFlash > 0 ? '#f7e9b8' : (e.alert ? '#9b3027' : '#6e3028');
+      block(.30,.05+bob,.40,.19, e.hitFlash > 0 ? '#fff2c4' : '#b58a63');
+      block(.25,.02+bob,.50,.07,'#342c23');
+      block(.34,.13+bob,.07,.025,'#211d19'); block(.59,.13+bob,.07,.025,'#211d19');
+      block(.21,.25+bob,.58,.36,uniform);
+      block(.13-stride,.28+bob,.16,.29,'#554633');
+      block(.71+stride,.28+bob,.16,.29,'#554633');
+      block(.31+stride,.59+bob,.15,.31,'#3e3a31');
+      block(.54-stride,.59+bob,.15,.31,'#3e3a31');
+      block(.39,.33+bob,.22,.07,'#c1a06b');
+      block(firing?.53:.58,.39+bob,.29,.055,'#28251f');
+      block(firing?.78:.82,.37+bob,.08,.09,'#1d1b18');
+      if (firing) {
+        ctx.fillStyle='#f3d38a';
+        ctx.fillRect(Math.round(left+.88*spriteW),Math.round(top+.35*spriteH),Math.max(2,Math.round(spriteW*.07)),Math.max(2,Math.round(spriteH*.07)));
+      }
+      ctx.fillStyle = `rgba(8,7,5,${1-dim})`;
+      ctx.fillRect(left, top, spriteW, spriteH);
+      // Tiny health pips when close enough to read.
+      if (dist < 5) {
+        const barW = spriteW*0.7, barX = screenX-barW/2, barY = top-5;
+        ctx.fillStyle='#211a16'; ctx.fillRect(barX,barY,barW,3);
+        ctx.fillStyle='#c94f3d'; ctx.fillRect(barX,barY,barW*(e.hp/e.maxHp),3);
+      }
+    }
+    // Red screen tint when a guard lands a hit.
+    if (damageFlash > 0) {
+      ctx.fillStyle = `rgba(170,25,15,${Math.min(0.28, damageFlash*0.32)})`;
+      ctx.fillRect(0,0,W,H);
+    }
+
+    // Retro pistol with a small recoil animation and a brief muzzle flash.
+    const kick = recoil;
+    const bob = Math.sin(performance.now() * 0.012) * 0.8;
+    ctx.save();
+    ctx.translate(0, bob + kick * 7);
+    // Hand / sleeve
+    ctx.fillStyle = '#493a2d';
+    ctx.beginPath(); ctx.moveTo(W*0.35,H); ctx.lineTo(W*0.40,H*0.84); ctx.lineTo(W*0.46,H*0.80); ctx.lineTo(W*0.54,H*0.80); ctx.lineTo(W*0.60,H*0.86); ctx.lineTo(W*0.66,H); ctx.fill();
+    // Pistol grip
+    ctx.fillStyle = '#302b24';
+    ctx.beginPath(); ctx.moveTo(W*0.455,H*0.83); ctx.lineTo(W*0.47,H*0.72); ctx.lineTo(W*0.53,H*0.72); ctx.lineTo(W*0.548,H*0.84); ctx.lineTo(W*0.53,H*0.94); ctx.lineTo(W*0.47,H*0.94); ctx.fill();
+    // Barrel and slide
+    ctx.fillStyle = '#777568'; ctx.fillRect(W*0.455,H*0.68,W*0.09,H*0.13);
+    ctx.fillStyle = '#b0a58b'; ctx.fillRect(W*0.468,H*0.67,W*0.064,H*0.025);
+    ctx.fillStyle = '#272721'; ctx.fillRect(W*0.477,H*0.65,W*0.046,H*0.055);
+    ctx.fillStyle = '#4b4a40'; ctx.fillRect(W*0.488,H*0.63,W*0.024,H*0.055);
+    // Muzzle flash appears only briefly after a shot.
+    if (muzzleFlash > 0) {
+      ctx.globalAlpha = Math.min(1, muzzleFlash * 8);
+      ctx.fillStyle = '#fff0a1';
+      ctx.beginPath(); ctx.moveTo(W*0.5,H*0.61); ctx.lineTo(W*0.455,H*0.52); ctx.lineTo(W*0.485,H*0.535); ctx.lineTo(W*0.47,H*0.47); ctx.lineTo(W*0.51,H*0.515); ctx.lineTo(W*0.54,H*0.475); ctx.lineTo(W*0.53,H*0.55); ctx.lineTo(W*0.56,H*0.53); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffad3e'; ctx.beginPath(); ctx.arc(W*0.5,H*0.56,9+muzzleFlash*15,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    // Small wall-impact spark at the reticle when firing into a wall.
+    if (impactFlash > 0) {
+      ctx.globalAlpha = Math.min(1, impactFlash * 5); ctx.strokeStyle = '#f4d38a'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W/2-5,H/2-4); ctx.lineTo(W/2+4,H/2+5); ctx.moveTo(W/2+4,H/2-5); ctx.lineTo(W/2-5,H/2+4); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    // Center reticle.
+    ctx.fillStyle = '#e8d8b5'; ctx.globalAlpha = 0.75;
+    ctx.fillRect(W/2-3,H/2,2,1); ctx.fillRect(W/2+2,H/2,2,1);
+    ctx.fillRect(W/2,H/2-3,1,2); ctx.fillRect(W/2,H/2+2,1,2); ctx.globalAlpha = 1;
+    // Optional tactical map: M toggles it. Walls, pickups, enemies, exit, and player are marked.
+    if (mapVisible) {
+      const tile = 4.2, pad = 7;
+      const mw = MAP_W*tile, mh = MAP_H*tile;
+      const ox = W-mw-pad, oy = pad;
+      ctx.fillStyle='rgba(7,8,7,0.88)';
+      ctx.fillRect(ox-4,oy-4,mw+8,mh+8);
+      ctx.strokeStyle='#b89a63'; ctx.lineWidth=1;
+      ctx.strokeRect(ox-4,oy-4,mw+8,mh+8);
+      for(let my=0;my<MAP_H;my++){
+        for(let mx=0;mx<MAP_W;mx++){
+          ctx.fillStyle=map[my][mx]==='#'?'#75634b':'#252a23';
+          ctx.fillRect(ox+mx*tile,oy+my*tile,tile-0.45,tile-0.45);
+        }
+      }
+      for(const p of pickups){
+        if(!p.active) continue;
+        ctx.fillStyle=p.type==='key'?'#f1cf62':(p.type==='health'?'#e16a5b':'#a8c27c');
+        ctx.fillRect(ox+p.x*tile-1,oy+p.y*tile-1,2.5,2.5);
+      }
+      ctx.fillStyle=hasKey?'#9fda87':'#c7a46b';
+      ctx.fillRect(ox+exitDoor.x*tile-1.5,oy+exitDoor.y*tile-1.5,3.5,3.5);
+      for(const e of enemies){
+        if(!e.alive) continue;
+        ctx.fillStyle=e.alert?'#ff6a4d':'#c34f3e';
+        ctx.beginPath();ctx.arc(ox+e.x*tile,oy+e.y*tile,1.8,0,Math.PI*2);ctx.fill();
+      }
+      const px=ox+player.x*tile, py=oy+player.y*tile;
+      ctx.fillStyle='#f4e5bd';ctx.beginPath();ctx.arc(px,py,2.2,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#f4e5bd';ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px+Math.cos(player.angle)*6,py+Math.sin(player.angle)*6);ctx.stroke();
+      ctx.font='5px Consolas,monospace';ctx.fillStyle='#e9d3a3';ctx.fillText('TACTICAL MAP',ox,oy+mh+10);
+    }
+
+    // Light vignette.
+    const vignette = ctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.72);
+    vignette.addColorStop(0,'rgba(0,0,0,0)'); vignette.addColorStop(1,'rgba(0,0,0,0.42)');
+    ctx.fillStyle = vignette; ctx.fillRect(0,0,W,H);
+  }
+  function startAmbient() {
+    if (!audioCtx || ambientStarted || audioMuted) return;
+    ambientStarted = true;
+    try {
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      osc1.type='sine'; osc1.frequency.value=48;
+      osc2.type='triangle'; osc2.frequency.value=73;
+      filter.type='lowpass'; filter.frequency.value=115;
+      gain.gain.value=0.018;
+      osc1.connect(filter); osc2.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+      osc1.start(); osc2.start(); ambientGain=gain;
+    } catch (_) {}
+  }
+  function toggleAudio() {
+    audioMuted = !audioMuted;
+    if (ambientGain && audioCtx) ambientGain.gain.setTargetAtTime(audioMuted ? 0 : 0.018, audioCtx.currentTime, 0.06);
+    if (!audioMuted && !ambientStarted) startAmbient();
+    if (audioText) audioText.textContent = audioMuted ? 'OFF' : 'ON';
+  }
+
+  function initAudio() {
+    if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) audioCtx = new AudioContext();
+  }
+  function footstep() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'triangle'; osc.frequency.setValueAtTime(95 + Math.random()*28, now);
+    osc.frequency.exponentialRampToValueAtTime(48, now + 0.075);
+    gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.055, now + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.1);
+  }
+  function gunSound() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(145, now); osc.frequency.exponentialRampToValueAtTime(42, now + 0.11);
+    gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.22, now + 0.004); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.15);
+    // A short filtered noise burst adds a dry, old-school mechanical crack.
+    const length = Math.floor(audioCtx.sampleRate * 0.075);
+    const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate), data = buffer.getChannelData(0);
+    for (let i=0; i<length; i++) data[i] = (Math.random()*2-1) * (1-i/length);
+    const noise = audioCtx.createBufferSource(), ng = audioCtx.createGain(); noise.buffer = buffer;
+    ng.gain.setValueAtTime(0.11, now); ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+    noise.connect(ng); ng.connect(audioCtx.destination); noise.start(now);
+  }
+  function collectNearby() {
+    for (const p of pickups) {
+      if(!p.active) continue;
+      if(Math.hypot(player.x-p.x,player.y-p.y)<0.48) {
+        if(p.type==='key') {
+          hasKey=true; p.active=false;
+          statusText.textContent='BRASS KEY ACQUIRED';
+        } else if(p.type==='health') {
+          if(playerHealth>=100) continue;
+          playerHealth=Math.min(100,playerHealth+p.amount); p.active=false;
+          statusText.textContent='MEDICAL SUPPLIES COLLECTED';
+        } else {
+          // Ammo pickups increase the total ammunition carried (loaded + reserve).
+          // Fill the magazine first, then put any remaining rounds into reserve.
+          const totalAmmo = ammo + reserveAmmo;
+          if (totalAmmo >= 108) continue;
+          let rounds = Math.min(p.amount, 108 - totalAmmo);
+          const toMagazine = Math.min(12 - ammo, rounds);
+          ammo += toMagazine;
+          rounds -= toMagazine;
+          reserveAmmo += rounds;
+          p.active = false;
+          statusText.textContent = `AMMUNITION COLLECTED (+${p.amount - Math.max(0, totalAmmo + p.amount - 108)} ROUNDS)`;
+        }
+      }
+    }
+    if(Math.hypot(player.x-exitDoor.x,player.y-exitDoor.y)<0.62) {
+      const remaining=enemies.filter(e=>e.alive).length;
+      if(!hasKey) statusText.textContent='EXIT LOCKED / FIND THE BRASS KEY';
+      else if(remaining>0) statusText.textContent='EXIT SEALED / ELIMINATE ALL HOSTILES';
+      else {
+        missionWon=true; running=false;
+        overlayTitle.textContent='MISSION COMPLETE';
+        overlayText.textContent='You found the key, cleared the halls, and reached the exit. Restart the page to play again.';
+        startBtn.textContent='PLAY AGAIN';
+        overlay.classList.remove('hidden');
+        if(document.pointerLockElement)document.exitPointerLock();
+      }
+    }
+  }
+
+  function hasLineOfSight(x1,y1,x2,y2) {
+    const dx=x2-x1, dy=y2-y1, dist=Math.hypot(dx,dy);
+    const steps=Math.ceil(dist*12);
+    for (let i=1;i<steps;i++) {
+      const t=i/steps;
+      if (wallAt(x1+dx*t,y1+dy*t)) return false;
+    }
+    return true;
+  }
+  function hurtEnemy(enemy) {
+    enemy.hp--; enemy.hitFlash=0.12; enemy.alert=true;
+    if (enemy.hp<=0) {
+      enemy.alive=false;
+      statusText.textContent='HOSTILE ELIMINATED';
+    } else {
+      statusText.textContent='TARGET HIT';
+    }
+  }
+  function enemyAttack(enemy, now) {
+    if (now < enemy.attackAt) return;
+    enemy.attackAt = now + 950 + Math.random()*350;
+    playerHealth = Math.max(0, playerHealth - (7 + Math.floor(Math.random()*7)));
+    damageFlash = 0.8;
+    statusText.textContent = 'UNDER FIRE / TAKE COVER';
+    if (playerHealth <= 0) {
+      gameOver = true; running = false;
+      overlayTitle.textContent = 'MISSION FAILED';
+      overlayText.textContent = 'The guards overwhelmed you. Restart the page to try again.';
+      startBtn.textContent = 'RESTART GAME';
+      overlay.classList.remove('hidden');
+      if (document.pointerLockElement) document.exitPointerLock();
+    }
+  }
+  function updateEnemies(dt, now) {
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      e.hitFlash=Math.max(0,e.hitFlash-dt);
+      const dx=player.x-e.x, dy=player.y-e.y, dist=Math.hypot(dx,dy);
+      const seesPlayer = dist < 7.5 && hasLineOfSight(e.x,e.y,player.x,player.y);
+      if (seesPlayer) e.alert=true;
+      if (!e.alert) continue;
+      if (dist > 2.25 && seesPlayer) {
+        const speed = 0.52;
+        const mx=(dx/(dist||1))*speed*dt, my=(dy/(dist||1))*speed*dt;
+        // Keep enemy collision simple and prevent walking through walls.
+        const radius=0.18;
+        if (!wallAt(e.x+mx+Math.sign(mx)*radius,e.y)) e.x+=mx;
+        if (!wallAt(e.x,e.y+my+Math.sign(my)*radius)) e.y+=my;
+      } else if (dist <= 4.0 && seesPlayer && running) {
+        enemyAttack(e,now);
+      }
+    }
+  }
+
+  function fire() {
+    if (!running || !locked || reloading) return;
+    const now = performance.now();
+    if (now - lastShot < 260) return;
+    lastShot = now;
+    if (ammo <= 0) { dryClick(); return; }
+    ammo--; recoil = 1; muzzleFlash = 0.12; impactFlash = 0.2;
+    gunSound();
+    // Hit the closest living enemy near the crosshair, only if no wall blocks the shot.
+    let target = null, bestDist = Infinity;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx=e.x-player.x, dy=e.y-player.y, dist=Math.hypot(dx,dy);
+      let diff=Math.atan2(dy,dx)-player.angle;
+      while(diff>Math.PI) diff-=Math.PI*2;
+      while(diff<-Math.PI) diff+=Math.PI*2;
+      const tolerance = Math.max(0.035, Math.atan2(0.22,dist));
+      if (Math.abs(diff)<tolerance && dist<bestDist && hasLineOfSight(player.x,player.y,e.x,e.y)) {
+        target=e; bestDist=dist;
+      }
+    }
+    if (target) hurtEnemy(target);
+    else statusText.textContent = 'WEAPON FIRED / NO HIT';
+  }
+  function dryClick() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime, osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'square'; osc.frequency.setValueAtTime(700, now); osc.frequency.exponentialRampToValueAtTime(240, now + 0.035);
+    gain.gain.setValueAtTime(0.035, now); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.045);
+  }
+  function reload() {
+    if (!running || reloading || ammo === 12 || reserveAmmo <= 0) return;
+    reloading = true; reloadUntil = performance.now() + 950;
+    statusText.textContent = 'RELOADING';
+    if (audioCtx) {
+      const now=audioCtx.currentTime, osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+      osc.type='square'; osc.frequency.setValueAtTime(240,now); osc.frequency.setValueAtTime(390,now+0.09); osc.frequency.setValueAtTime(280,now+0.19);
+      gain.gain.setValueAtTime(0.0001,now); gain.gain.setValueAtTime(0.035,now+0.015); gain.gain.exponentialRampToValueAtTime(0.0001,now+0.26);
+      osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.27);
+    }
+  }
+  function updateHud(moving,sprinting) {
+    positionText.textContent = `${String(Math.floor(player.x)).padStart(2,'0')} : ${String(Math.floor(player.y)).padStart(2,'0')}`;
+    paceText.textContent = moving ? (sprinting ? 'SPRINTING' : 'WALKING') : 'STANDING';
+    staminaBar.style.width = `${stamina}%`;
+    staminaBar.style.background = stamina < 25 ? '#b34e3e' : '#d0a65e';
+    ammoText.textContent = reloading ? 'RELOAD...' : `${String(ammo).padStart(2,'0')} / ${String(reserveAmmo).padStart(2,'0')}`;
+    healthText.textContent = `${playerHealth}%`;
+    healthText.style.color = playerHealth < 30 ? '#e87962' : '#f1d69e';
+    enemyText.textContent = String(enemies.filter(e=>e.alive).length).padStart(2,'0');
+    objectiveText.textContent = missionWon ? 'COMPLETE' : (!hasKey ? 'FIND KEY' : (enemies.some(e=>e.alive) ? 'CLEAR HALLS' : 'REACH EXIT'));
+    mapText.textContent = mapVisible ? 'ON' : 'OFF';
+    if (audioText) audioText.textContent = audioMuted ? 'OFF' : 'ON';
+    ammoText.style.color = ammo === 0 ? '#e87962' : '#f1d69e';
+  }
+  function loop(time) {
+    const dt = Math.min(0.04, (time-lastTime)/1000 || 0); lastTime = time;
+    recoil = Math.max(0, recoil - dt * 7);
+    muzzleFlash = Math.max(0, muzzleFlash - dt);
+    impactFlash = Math.max(0, impactFlash - dt);
+    damageFlash = Math.max(0, damageFlash - dt);
+    if (running) { updateEnemies(dt, time); collectNearby(); }
+    if (reloading && time >= reloadUntil) { const needed = 12 - ammo; const loaded = Math.min(needed, reserveAmmo); ammo += loaded; reserveAmmo -= loaded; reloading = false; statusText.textContent = 'ACTIVE / MISSION IN PROGRESS'; }
+    let moving = false, sprinting = !!(keys.ShiftLeft || keys.ShiftRight) && stamina > 1;
+    if (running) {
+      let forward = (keys.KeyW || keys.ArrowUp ? 1:0) - (keys.KeyS || keys.ArrowDown ? 1:0);
+      let strafe = (keys.KeyD ? 1:0) - (keys.KeyA ? 1:0);
+      const length = Math.hypot(forward,strafe) || 1;
+      forward /= length; strafe /= length;
+      moving = !!(forward || strafe);
+      const speed = sprinting ? 3.8 : 2.05;
+      if (moving) {
+        const dx = (Math.cos(player.angle)*forward + Math.cos(player.angle+Math.PI/2)*strafe) * speed * dt;
+        const dy = (Math.sin(player.angle)*forward + Math.sin(player.angle+Math.PI/2)*strafe) * speed * dt;
+        move(dx,dy);
+        if (sprinting) stamina = Math.max(0,stamina-24*dt); else stamina = Math.min(100,stamina+13*dt);
+        const interval = sprinting ? 0.27 : 0.42;
+        if (time-lastStep > interval*1000) { footstep(); lastStep=time; }
+      } else stamina = Math.min(100,stamina+17*dt);
+    }
+    render(); updateHud(moving,sprinting);
+    requestAnimationFrame(loop);
+  }
+  function showPauseOverlay() {
+    running = false;
+    for (const k in keys) keys[k] = false;
+    overlayTitle.textContent = 'MISSION PAUSED';
+    overlayText.textContent = 'Take a breather. Resume to return to the halls, or restart the mission to begin from the start.';
+    startBtn.textContent = 'RESUME MISSION';
+    overlay.classList.remove('hidden');
+    statusText.textContent = 'PAUSED';
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  function restartMission() {
+    // Reloading restores the complete mission state, enemies, pickups, health and ammunition.
+    window.location.reload();
+  }
+
+  function begin() {
+    if (gameOver || missionWon) { restartMission(); return; }
+    initAudio(); startAmbient(); running = true;
+    overlay.classList.add('hidden');
+    statusText.textContent = 'ACTIVE / MISSION IN PROGRESS';
+    canvas.requestPointerLock?.();
+  }
+  pauseBtn.addEventListener('click', () => {
+    if (running) showPauseOverlay();
+    else if (!overlay.classList.contains('hidden') && !gameOver && !missionWon) begin();
+  });
+  restartBtn.addEventListener('click', restartMission);
+  startBtn.addEventListener('click', begin);
+  document.addEventListener('pointerlockchange', () => {
+    locked = document.pointerLockElement === canvas;
+    if (running && !locked) {
+      running = false;
+      for (const k in keys) keys[k] = false;
+      overlayTitle.textContent = 'MISSION PAUSED';
+      overlayText.textContent = 'Mouse control was released. Resume the mission when you are ready.';
+      startBtn.textContent = 'RESUME MISSION'; overlay.classList.remove('hidden'); statusText.textContent = 'PAUSED';
+    }
+  });
+  document.addEventListener('mousemove', e => {
+    if (locked && running) player.angle += e.movementX * 0.0025;
+  });
+  document.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+    if (e.code === 'ArrowLeft' && !locked) player.angle -= 0.06;
+    if (e.code === 'ArrowRight' && !locked) player.angle += 0.06;
+    if (e.code === 'KeyR' && !e.repeat) reload();
+    if (e.code === 'KeyM' && !e.repeat) mapVisible = !mapVisible;
+    if (e.code === 'KeyV' && !e.repeat) toggleAudio();
+    if (e.code === 'KeyP' && !e.repeat) {
+      if (running) showPauseOverlay();
+      else if (!overlay.classList.contains('hidden') && !gameOver && !missionWon) begin();
+    }
+  });
+  document.addEventListener('keyup', e => { keys[e.code] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k]=false; });
+  canvas.addEventListener('click', () => { if (running && !locked) canvas.requestPointerLock?.(); });
+  document.addEventListener('mousedown', e => { if (e.button === 0 && locked && running) fire(); });
+  render(); updateHud(false,false); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

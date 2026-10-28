@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRON HALLS — Stage 9 Full 3D</title>
+<style>
+:root{color-scheme:dark;--amber:#e7bd72;--panel:#11110f}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090a09;color:#eee8d8;font-family:Consolas,Monaco,monospace}
+#game{position:fixed;inset:0;background:#111}
+canvas{display:block;width:100%;height:100%}
+#top{position:fixed;top:12px;left:14px;right:14px;display:flex;justify-content:space-between;gap:12px;pointer-events:none;text-shadow:0 2px 4px #000;font-size:12px;letter-spacing:.08em}
+#brand{color:var(--amber);font-weight:bold;font-size:15px}
+#objective{text-align:right;color:#eee8d8}
+#hud{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:10px;align-items:stretch;max-width:calc(100% - 20px);pointer-events:none}
+.panel{background:#11110fe8;border:1px solid #716044;padding:9px 13px;min-width:100px;box-shadow:0 4px 20px #0008}
+.label{font-size:9px;color:#b4a88e;letter-spacing:.12em}.value{font-size:17px;color:#f1d69e;font-weight:bold;margin-top:4px}
+#healthbar{height:4px;background:#453a2b;margin-top:5px;width:100%}#healthfill{height:100%;width:100%;background:#c85c47}
+#crosshair{position:fixed;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);pointer-events:none}
+#crosshair:before,#crosshair:after{content:"";position:absolute;background:#f3e7ce;box-shadow:0 0 3px #000}
+#crosshair:before{left:8px;top:2px;width:2px;height:14px}#crosshair:after{left:2px;top:8px;width:14px;height:2px}
+#centerMessage{position:fixed;top:22%;left:50%;transform:translateX(-50%);color:#f3d39a;text-shadow:0 2px 5px #000;font-size:12px;letter-spacing:.14em;text-align:center;pointer-events:none;max-width:90vw}
+#mapBox{position:fixed;top:54px;right:14px;width:220px;display:none;background:#090a09e8;border:1px solid #716044;padding:8px}
+#mapBox canvas{width:100%;height:auto;image-rendering:pixelated}
+#overlay{position:fixed;inset:0;display:grid;place-items:center;background:#050605c9;padding:18px}
+#overlay.hidden{display:none}
+.card{max-width:520px;width:100%;background:#11110ff2;border:1px solid #716044;padding:26px;box-shadow:0 10px 50px #000b}
+h1{margin:0 0 8px;color:var(--amber);font-size:clamp(24px,5vw,40px);letter-spacing:.12em}
+h2{margin:0 0 12px;color:var(--amber);font-size:16px;letter-spacing:.1em}
+p{font-size:13px;line-height:1.7;color:#cbc4b4}
+button{font:700 13px Consolas,monospace;letter-spacing:.1em;background:var(--amber);color:#17120a;border:0;padding:13px 18px;cursor:pointer}
+button:hover{background:#f7d99c}.sub{font-size:10px;color:#a49a83;line-height:1.8;margin-top:16px}
+#damage{position:fixed;inset:0;pointer-events:none;background:#c1261640;opacity:0;transition:opacity .08s}
+#pauseTag{position:fixed;left:50%;top:17%;transform:translateX(-50%);color:#f1d69e;display:none;text-shadow:0 2px 4px #000}
+@media(max-width:600px){#hud{gap:5px;bottom:6px}.panel{padding:7px;min-width:70px}.value{font-size:14px}#top{font-size:10px}#mapBox{width:150px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="top"><div><div id="brand">IRON HALLS // FULL 3D</div><div id="state">STAGE 9 — THREE-DIMENSIONAL WORLD</div></div><div id="objective">OBJECTIVE: FIND THE KEY<br>THEN REACH THE EXIT</div></div>
+<div id="crosshair"></div><div id="centerMessage"></div><div id="pauseTag">PAUSED — PRESS P TO RESUME</div>
+<div id="mapBox"><div class="label" style="margin-bottom:6px">TACTICAL MAP — M</div><canvas id="mapCanvas" width="200" height="160"></canvas></div>
+<div id="hud">
+ <div class="panel"><div class="label">HEALTH</div><div class="value" id="healthVal">100</div><div id="healthbar"><div id="healthfill"></div></div></div>
+ <div class="panel"><div class="label">PISTOL (MAG / RES)</div><div class="value" id="ammoVal">12 / 48</div></div>
+ <div class="panel"><div class="label">STATUS</div><div class="value" id="keyVal">NO KEY</div></div>
+ <div class="panel"><div class="label">GUARDS</div><div class="value" id="enemyVal">4</div></div>
+</div>
+<div id="damage"></div>
+<div id="overlay"><div class="card"><h1>IRON HALLS</h1><h2>STAGE 9 — FULL 3D REBUILD</h2><p>The environment, guards, and pistol are now rendered in one real 3D scene. Walls naturally block line of sight and shots. Find the key, survive the guards, and reach the exit.</p><p><b>WASD</b> move · <b>Mouse</b> look · <b>Shift</b> sprint · <b>Click</b> fire · <b>R</b> reload · <b>M</b> map · <b>P / Esc</b> pause</p><button id="startBtn">ENTER THE FACILITY</button><div class="sub">Requires an internet connection to load Three.js and the animated guard model. If the model cannot load, a built-in low-poly 3D guard is used instead.</div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script>
+(() => {
+'use strict';
+const host=document.getElementById('game');
+if(!window.THREE){document.getElementById('centerMessage').textContent='Three.js failed to load. Check your internet connection.';return;}
+const map=[
+'####################',
+'#......#...........#',
+'#......#..####.....#',
+'#......#..#..#.....#',
+'#..........#..#....#',
+'#..####....#..#....#',
+'#..#.......#..####.#',
+'#..#..##..........##',
+'#.....##..###......#',
+'###........#.......#',
+'#..........#..###..#',
+'#..####........#...#',
+'#.....#........#...#',
+'#.....#..####......#',
+'#...........#......#',
+'####################'
+];
+const H=map.length,W=map[0].length;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x171a1c);scene.fog=new THREE.Fog(0x171a1c,8,25);
+const camera=new THREE.PerspectiveCamera(74,innerWidth/innerHeight,.05,80);camera.position.set(2.5,1.05,2.5);camera.rotation.order='YXZ';scene.add(camera);
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);renderer.outputEncoding=THREE.sRGBEncoding;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xbfcbd2,0x33271c,1.25));
+const keyLight=new THREE.DirectionalLight(0xffd7a0,1.35);keyLight.position.set(5,9,4);keyLight.castShadow=true;keyLight.shadow.mapSize.set(1024,1024);scene.add(keyLight);
+const wallMeshes=[],enemyTargets=[],enemyList=[],pickupList=[];
+const wallMatA=new THREE.MeshStandardMaterial({color:0x5a554b,roughness:1}),wallMatB=new THREE.MeshStandardMaterial({color:0x464a49,roughness:1});
+const floorMats=[new THREE.MeshStandardMaterial({color:0x373632,roughness:1}),new THREE.MeshStandardMaterial({color:0x2c2d2b,roughness:1})];
+const floorGeo=new THREE.PlaneGeometry(1,1);
+for(let z=0;z<H;z++)for(let x=0;x<W;x++){
+ const floor=new THREE.Mesh(floorGeo,floorMats[(x+z)%2]);floor.rotation.x=-Math.PI/2;floor.position.set(x+.5,0,z+.5);floor.receiveShadow=true;scene.add(floor);
+ if(map[z][x]==='#'){
+  const wall=new THREE.Mesh(new THREE.BoxGeometry(1,2.5,1),((x*7+z*11)%3===0)?wallMatB:wallMatA);
+  wall.position.set(x+.5,1.25,z+.5);wall.castShadow=true;wall.receiveShadow=true;scene.add(wall);wallMeshes.push(wall);
+  const cap=new THREE.Mesh(new THREE.BoxGeometry(1.01,.06,1.01),new THREE.MeshStandardMaterial({color:0x292a28,roughness:1}));cap.position.set(x+.5,2.52,z+.5);scene.add(cap);
+ }
+}
+function wallAt(x,z){const mx=Math.floor(x),mz=Math.floor(z);return mz<0||mz>=H||mx<0||mx>=W||map[mz][mx]==='#';}
+function canMove(x,z,r=.2){return !wallAt(x-r,z-r)&&!wallAt(x+r,z-r)&&!wallAt(x-r,z+r)&&!wallAt(x+r,z+r);}
+const player={x:2.5,z:2.5,yaw:.15,pitch:0,health:100};
+camera.position.set(player.x,1.05,player.z);
+let ammo=12,reserve=48,reloading=false,reloadEnd=0,health=100,hasKey=false,won=false,dead=false,paused=true,started=false,mapVisible=false;
+let lastShot=0,lastEnemyAttack=0,damageTime=0,flashEnd=0,noticeUntil=0,notice='';
+const keys=Object.create(null),clock=new THREE.Clock();
+const pistol=new THREE.Group();camera.add(pistol);pistol.position.set(.28,-.28,-.55);
+const gunMat=new THREE.MeshStandardMaterial({color:0x292b2a,metalness:.7,roughness:.4});
+const gripMat=new THREE.MeshStandardMaterial({color:0x30251b,roughness:.9});
+function gunBox(w,h,d,mat,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);pistol.add(m);return m;}
+gunBox(.13,.13,.34,gunMat,0,.02,0);gunBox(.09,.08,.22,new THREE.MeshStandardMaterial({color:0x454846,metalness:.65,roughness:.3}),0,.08,-.11);gunBox(.075,.19,.1,gripMat,0,-.11,.07);gunBox(.04,.025,.16,gunMat,0,.1,-.13);
+const muzzle=new THREE.PointLight(0xffad4f,0,2);muzzle.position.set(0,.08,-.32);pistol.add(muzzle);
+function makeFallbackGuard(){
+ const g=new THREE.Group();
+ const uniform=new THREE.MeshStandardMaterial({color:0x52634b,roughness:.95}),dark=new THREE.MeshStandardMaterial({color:0x292d28,roughness:1}),skin=new THREE.MeshStandardMaterial({color:0xc19a76,roughness:1}),helmet=new THREE.MeshStandardMaterial({color:0x343c31,roughness:.8});
+ function part(geo,mat,x,y,z){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;g.add(m);return m;}
+ part(new THREE.BoxGeometry(.42,.52,.24),uniform,0,.9,0);
+ part(new THREE.SphereGeometry(.16,8,6),skin,0,1.3,0);
+ part(new THREE.BoxGeometry(.36,.13,.31),helmet,0,1.43,0);
+ part(new THREE.BoxGeometry(.25,.07,.05),dark,0,1.32,-.14);
+ part(new THREE.BoxGeometry(.14,.43,.14),uniform,-.14,.38,0);part(new THREE.BoxGeometry(.14,.43,.14),uniform,.14,.38,0);
+ part(new THREE.BoxGeometry(.13,.42,.13),uniform,-.29,.92,0);part(new THREE.BoxGeometry(.13,.42,.13),uniform,.29,.92,0);
+ const rifle=part(new THREE.BoxGeometry(.09,.08,.48),dark,.22,.83,.2);rifle.rotation.x=.08;
+ const muzzle=new THREE.Mesh(new THREE.SphereGeometry(.075,6,4),new THREE.MeshBasicMaterial({color:0xffb34f}));
+ muzzle.position.set(.22,.84,.47);muzzle.visible=false;g.add(muzzle);g.userData.weaponMuzzle=muzzle;
+ const flashLight=new THREE.PointLight(0xff9b3c,0,2);flashLight.position.copy(muzzle.position);g.add(flashLight);g.userData.weaponFlashLight=flashLight;
+ return g;
+}
+function setNotice(t,ms=1600){notice=t;noticeUntil=performance.now()+ms;document.getElementById('centerMessage').textContent=t;}
+function createEnemy(x,z){
+ const root=new THREE.Group();root.position.set(x,0,z);scene.add(root);
+ const fallback=makeFallbackGuard();root.add(fallback);
+ const e={x,z,hp:3,alive:true,alert:false,attackAt:0,shootingUntil:0,root,fallback,mixer:null,actions:[],activeAction:null,modelLoaded:false,lastX:x,lastZ:z};
+ enemyList.push(e);return e;
+}
+createEnemy(4.8,1.55);createEnemy(9.4,4.55);createEnemy(15.6,2.5);createEnemy(16.3,12.5);
+// Attempt to replace the placeholder guards with rigged public 3D models.
+if(THREE.GLTFLoader){
+ const loader=new THREE.GLTFLoader();
+ loader.load('https://threejs.org/examples/models/gltf/Soldier.glb',gltf=>{
+  enemyList.forEach(e=>{
+   const model=THREE.SkeletonUtils.clone(gltf.scene);model.scale.setScalar(.62);model.rotation.y=Math.PI;
+   model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+   e.root.remove(e.fallback);e.root.add(model);e.fallback=model;e.modelLoaded=true;
+   const flash=new THREE.Mesh(new THREE.SphereGeometry(.075,6,4),new THREE.MeshBasicMaterial({color:0xffb34f}));
+   flash.position.set(.22,.9,.48);flash.visible=false;model.add(flash);model.userData.weaponMuzzle=flash;
+   const flashLight=new THREE.PointLight(0xff9b3c,0,2);flashLight.position.copy(flash.position);model.add(flashLight);model.userData.weaponFlashLight=flashLight;
+   e.mixer=new THREE.AnimationMixer(model);
+   const clips=gltf.animations||[];
+   const find=s=>clips.find(c=>c.name.toLowerCase().includes(s));
+   const idle=find('idle')||clips[0],walk=find('walk')||idle,run=find('run')||walk;
+   e.actions=[idle&&e.mixer.clipAction(idle),walk&&e.mixer.clipAction(walk),run&&e.mixer.clipAction(run)];
+   e.actions=e.actions.filter(Boolean);e.idle=e.actions[0];e.walk=e.actions[1]||e.idle;e.run=e.actions[2]||e.walk;
+   if(e.idle){e.idle.play();e.activeAction=e.idle;}
+  });
+  setNotice('ANIMATED 3D GUARDS LOADED',1800);
+ },undefined,err=>console.warn('Public guard model unavailable; using built-in low-poly guards.',err));
+}
+function makePickup(x,z,type,amount){
+ const g=new THREE.Group();g.position.set(x,.35,z);scene.add(g);
+ let mesh,mat;
+ if(type==='health'){mat=new THREE.MeshStandardMaterial({color:0x4edc72,emissive:0x113b17});mesh=new THREE.BoxGeometry(.28,.28,.28);}
+ else if(type==='ammo'){mat=new THREE.MeshStandardMaterial({color:0xe4bd62,metalness:.4});mesh=new THREE.BoxGeometry(.28,.18,.2);}
+ else {mat=new THREE.MeshStandardMaterial({color:0x4bc4db,emissive:0x123944,metalness:.5});mesh=new THREE.OctahedronGeometry(.25,0);}
+ const item=new THREE.Mesh(mesh,mat);item.castShadow=true;g.add(item);
+ const glow=new THREE.PointLight(type==='key'?0x36bddd:type==='health'?0x42d86a:0xe0ae4f,.45,2);g.add(glow);
+ pickupList.push({x,z,type,amount,root:g,active:true,baseY:.35});
+}
+makePickup(7.5,2.5,'health',30);makePickup(12.5,6.5,'ammo',18);makePickup(3.5,10.5,'ammo',12);makePickup(10.5,11.5,'health',25);makePickup(14.5,13.5,'key',1);
+const exit=new THREE.Group();exit.position.set(17.5,0,14.5);scene.add(exit);
+const door=new THREE.Mesh(new THREE.BoxGeometry(.75,2.1,.16),new THREE.MeshStandardMaterial({color:0x3d5558,metalness:.45,roughness:.5,emissive:0x0b1518}));door.position.y=1.05;door.castShadow=true;exit.add(door);
+const doorLight=new THREE.PointLight(0x38b8d0,.8,3);doorLight.position.y=1.6;exit.add(doorLight);
+const raycaster=new THREE.Raycaster();raycaster.far=20;
+function enemyMeshes(e){const arr=[];e.root.traverse(o=>{if(o.isMesh)arr.push(o)});return arr;}
+function shoot(){
+ const now=performance.now();if(paused||dead||won||reloading||now-lastShot<230)return;
+ if(ammo<=0){setNotice('MAGAZINE EMPTY — PRESS R',850);return;}
+ lastShot=now;ammo--;pistol.position.z=-.47;flashEnd=now+70;muzzle.intensity=2.5;
+ setTimeout(()=>{muzzle.intensity=0;},65);
+ camera.updateMatrixWorld(true);raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+ const walls=raycaster.intersectObjects(wallMeshes,false);const wallDist=walls.length?walls[0].distance:Infinity;
+ let hit=null,hitDist=Infinity;
+ for(const e of enemyList){if(!e.alive)continue;const hits=raycaster.intersectObjects(enemyMeshes(e),false);if(hits.length&&hits[0].distance<hitDist){hit=e;hitDist=hits[0].distance;}}
+ if(hit&&hitDist<wallDist){
+  hit.hp--;hit.alert=true;setNotice(hit.hp<=0?'GUARD DOWN':'TARGET HIT',500);
+  if(hit.hp<=0){hit.alive=false;hit.root.visible=false;}
+ }else{setNotice('SHOT FIRED',250);}
+ updateHud();
+}
+function reload(){if(paused||reloading||ammo===12||reserve<=0)return;reloading=true;reloadEnd=performance.now()+1000;setNotice('RELOADING…',1000);}
+function pause(){paused=true;document.exitPointerLock?.();document.getElementById('pauseTag').style.display='block';}
+function start(){if(won||dead){location.reload();return;}started=true;paused=false;document.getElementById('overlay').classList.add('hidden');document.getElementById('pauseTag').style.display='none';renderer.domElement.requestPointerLock?.();}
+document.getElementById('startBtn').addEventListener('click',start);
+renderer.domElement.addEventListener('click',()=>{if(!started){return;}if(document.pointerLockElement!==renderer.domElement&&!paused){renderer.domElement.requestPointerLock?.();return;}shoot();});
+document.addEventListener('pointerlockchange',()=>{if(started&&document.pointerLockElement!==renderer.domElement&&!won&&!dead){paused=true;document.getElementById('pauseTag').style.display='block';}});
+document.addEventListener('mousemove',e=>{if(document.pointerLockElement!==renderer.domElement||paused)return;player.yaw-=e.movementX*.0022;player.pitch-=e.movementY*.0018;player.pitch=Math.max(-1.15,Math.min(1.15,player.pitch));camera.rotation.set(player.pitch,player.yaw,0,'YXZ');});
+document.addEventListener('keydown',e=>{keys[e.code]=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+ if(e.code==='KeyR')reload();if(e.code==='KeyM'){mapVisible=!mapVisible;document.getElementById('mapBox').style.display=mapVisible?'block':'none';drawMap();}
+ if(e.code==='KeyP'&&!e.repeat&&started&&!won&&!dead){if(paused){paused=false;document.getElementById('pauseTag').style.display='none';renderer.domElement.requestPointerLock?.();}else pause();}
+ if(e.code==='Escape'&&started&&!paused)pause();
+});
+document.addEventListener('keyup',e=>keys[e.code]=false);
+document.addEventListener('mousedown',e=>{if(e.button===0&&document.pointerLockElement===renderer.domElement)shoot();});
+function updateHud(){document.getElementById('healthVal').textContent=Math.max(0,Math.ceil(health));document.getElementById('healthfill').style.width=Math.max(0,health)+'%';document.getElementById('ammoVal').textContent=ammo+' / '+reserve;document.getElementById('keyVal').textContent=hasKey?'KEY ACQUIRED':'NO KEY';document.getElementById('enemyVal').textContent=enemyList.filter(e=>e.alive).length;document.getElementById('objective').innerHTML=hasKey?'OBJECTIVE: REACH THE EXIT':'OBJECTIVE: FIND THE KEY<br>THEN REACH THE EXIT';}
+function drawMap(){const c=document.getElementById('mapCanvas'),cx=c.getContext('2d'),s=10;cx.clearRect(0,0,c.width,c.height);for(let z=0;z<H;z++)for(let x=0;x<W;x++){cx.fillStyle=map[z][x]==='#'?'#777064':'#242522';cx.fillRect(x*s,z*s,s,s);}pickupList.forEach(p=>{if(p.active){cx.fillStyle=p.type==='key'?'#44d6e8':p.type==='health'?'#52d76e':'#e7bd72';cx.fillRect(p.x*s-2,p.z*s-2,4,4);}});cx.fillStyle='#dc6655';cx.fillRect(exit.position.x*s-3,exit.position.z*s-3,6,6);cx.fillStyle='#fff0b8';cx.beginPath();cx.arc(player.x*s,player.z*s,3,0,Math.PI*2);cx.fill();cx.strokeStyle='#fff0b8';cx.beginPath();cx.moveTo(player.x*s,player.z*s);cx.lineTo((player.x-Math.sin(player.yaw))*s,(player.z-Math.cos(player.yaw))*s);cx.stroke();enemyList.forEach(e=>{if(e.alive){cx.fillStyle='#e45d4f';cx.fillRect(e.x*s-2,e.z*s-2,4,4);}});}
+function hasLineOfSight(e){const origin=new THREE.Vector3(player.x,1.0,player.z),target=new THREE.Vector3(e.x,1.0,e.z),dir=target.clone().sub(origin),dist=dir.length();dir.normalize();raycaster.set(origin,dir);raycaster.far=dist;return raycaster.intersectObjects(wallMeshes,false).length===0;}
+function endGame(win){won=win;dead=!win;paused=true;document.exitPointerLock?.();document.getElementById('overlay').classList.remove('hidden');document.querySelector('#overlay h1').textContent=win?'MISSION COMPLETE':'MISSION FAILED';document.querySelector('#overlay h2').textContent=win?'KEY SECURED — EXIT REACHED':'YOU DID NOT SURVIVE';document.querySelector('#overlay p').textContent=win?'The facility is secure. Restart to play again.':'The guards overwhelmed you. Restart the mission and try again.';document.getElementById('startBtn').textContent='RESTART MISSION';}
+function update(dt,now){
+ if(paused||dead||won)return;
+ camera.position.set(player.x,1.05,player.z);camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
+ if(reloading&&now>=reloadEnd){const n=Math.min(12-ammo,reserve);ammo+=n;reserve-=n;reloading=false;setNotice('RELOADED',650);}
+ const speed=(keys.ShiftLeft||keys.ShiftRight)?4.5:2.8;let f=(keys.KeyW?1:0)-(keys.KeyS?1:0),s=(keys.KeyD?1:0)-(keys.KeyA?1:0);const mag=Math.hypot(f,s)||1;f/=mag;s/=mag;
+ const dx=(-Math.sin(player.yaw)*f+Math.cos(player.yaw)*s)*speed*dt,dz=(-Math.cos(player.yaw)*f-Math.sin(player.yaw)*s)*speed*dt;
+ if(canMove(player.x+dx,player.z))player.x+=dx;if(canMove(player.x,player.z+dz))player.z+=dz;
+ camera.position.set(player.x,1.05,player.z);
+ pistol.position.z=THREE.MathUtils.lerp(pistol.position.z,-.55,Math.min(1,dt*16));
+ if(now<flashEnd)muzzle.intensity=2;else muzzle.intensity=0;
+ for(const e of enemyList){if(!e.alive)continue;const dxp=player.x-e.x,dzp=player.z-e.z,d=Math.hypot(dxp,dzp);if(d<9&&hasLineOfSight(e))e.alert=true;
+  const visibleToPlayer=d<9&&hasLineOfSight(e);
+  if(visibleToPlayer)e.alert=true;
+  const inAttackRange=e.alert&&d<6&&visibleToPlayer;
+  const isAttacking=inAttackRange&&now>=e.attackAt&&d>0.05;
+  // Stop and face the hero while shooting; face the direction of travel while approaching.
+  if(e.alert&&d>0.05){
+    // dxp/dzp points from the guard toward the hero. Keep this yaw both
+    // while approaching and while firing; never negate it.
+    e.root.rotation.y=Math.atan2(dxp,dzp);
+  }
+  if(e.alert&&!inAttackRange&&d>1.45&&visibleToPlayer){
+    const step=Math.min(1.25*dt,d-1.2),nx=e.x+dxp/d*step,nz=e.z+dzp/d*step;
+    if(!wallAt(nx,e.z))e.x=nx;if(!wallAt(e.x,nz))e.z=nz;e.root.position.set(e.x,0,e.z);
+  }
+  if(e.mixer){
+    const moving=e.alert&&!inAttackRange&&d>1.5;
+    const desired=moving?(e.run||e.walk):(e.idle||e.actions[0]);
+    if(desired&&desired!==e.activeAction){if(e.activeAction)e.activeAction.fadeOut(.12);desired.reset().fadeIn(.12).play();e.activeAction=desired;}
+    e.mixer.update(dt);
+  }
+  // Visible attack cycle: muzzle flash and tracer before damage is applied.
+  if(isAttacking){
+    e.attackAt=now+1150;e.shootingUntil=now+180;
+    const muzzle=e.fallback&&e.fallback.userData.weaponMuzzle;
+    const flashLight=e.fallback&&e.fallback.userData.weaponFlashLight;
+    if(muzzle)muzzle.visible=true;if(flashLight)flashLight.intensity=2.5;
+    setTimeout(()=>{if(muzzle)muzzle.visible=false;if(flashLight)flashLight.intensity=0;},150);
+    const start=new THREE.Vector3(e.x,0.92,e.z),end=new THREE.Vector3(player.x,0.92,player.z);
+    const tracerGeo=new THREE.BufferGeometry().setFromPoints([start,end]);
+    const tracer=new THREE.Line(tracerGeo,new THREE.LineBasicMaterial({color:0xffb45d,transparent:true,opacity:.9}));
+    scene.add(tracer);setTimeout(()=>{scene.remove(tracer);tracerGeo.dispose();tracer.material.dispose();},110);
+    setTimeout(()=>{
+      if(paused||dead||won||!e.alive)return;
+      const dd=Math.hypot(player.x-e.x,player.z-e.z);
+      if(dd<6&&hasLineOfSight(e)){
+        health-=8;damageTime=performance.now();document.getElementById('damage').style.opacity='.8';
+        setTimeout(()=>document.getElementById('damage').style.opacity='0',100);
+        if(health<=0){health=0;updateHud();endGame(false);return;}updateHud();
+      }
+    },220);
+  }
+ }
+ for(const p of pickupList){if(!p.active)continue;p.root.rotation.y+=dt*.8;p.root.position.y=p.baseY+Math.sin(now*.002+p.x)*.07;if(Math.hypot(player.x-p.x,player.z-p.z)<.65){if(p.type==='health'){if(health>=100)continue;health=Math.min(100,health+p.amount);setNotice('HEALTH RESTORED');}
+ else if(p.type==='ammo'){const total=ammo+reserve;if(total>=108)continue;let rounds=Math.min(p.amount,108-total),m=Math.min(12-ammo,rounds);ammo+=m;rounds-=m;reserve+=rounds;setNotice('AMMUNITION COLLECTED');}
+ else{hasKey=true;setNotice('KEY ACQUIRED — REACH THE EXIT');}
+ p.active=false;p.root.visible=false;updateHud();}}
+ if(hasKey&&Math.hypot(player.x-exit.position.x,player.z-exit.position.z)<.85){endGame(true);return;}
+ updateHud();if(mapVisible)drawMap();
+ if(notice&&now>noticeUntil)document.getElementById('centerMessage').textContent='';
+}
+function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),now=performance.now();update(dt,now);renderer.render(scene,camera);}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+updateHud();drawMap();animate();
+})();
+</script>
+</body>
+</html>
